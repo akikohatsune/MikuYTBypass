@@ -58,21 +58,6 @@ After code changes:
 2. Hard refresh YouTube tab (`Ctrl+Shift+R`)
 3. Reopen DevTools if panel changes are not reflected
 
-## Dev: Generate Icon Sizes
-
-Run:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/generate-icons.ps1
-```
-
-Output files:
-
-- `icons/icon-16.png`
-- `icons/icon-32.png`
-- `icons/icon-48.png`
-- `icons/icon-128.png`
-
 ## Dev: Open Custom Panel
 
 1. Open a YouTube page
