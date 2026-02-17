@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="miku.jpg" alt="img" width="360">
+  <img src="miku.png" alt="img" width="360">
 </p>
 <p align="center"><span style="color:#8a8f98;">"Miku mode: ON, YouTube ads mode: OFF."</span></p>
 
