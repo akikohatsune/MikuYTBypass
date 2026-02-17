@@ -72,7 +72,7 @@ After code changes:
 - Only tested on Chromium browsers, may not work on other platforms.
 
 ## License
-This project is licensed under the MIT License. Please comply with the MIT License terms when using it.
+This project is licensed under the CC0 1.0 Universal License. Fell free:)
 
 ---
 
