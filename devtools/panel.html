@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MikuYTBypass Panel</title>
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body>
+    <div class="root">
+      <section class="card">
+        <div class="card-head">
+          <h1>Status</h1>
+          <span id="conn-dot" class="dot"></span>
+        </div>
+        <div class="status-grid">
+          <div class="row"><span>Route</span><code id="status-route">-</code></div>
+          <div class="row"><span>Ad State</span><code id="status-ad-state">-</code></div>
+          <div class="row"><span>Ad Sessions</span><code id="status-ad-sessions">0</code></div>
+          <div class="row"><span>Skip Clicks</span><code id="status-skip-clicks">0</code></div>
+          <div class="row"><span>Updated</span><code id="status-updated">-</code></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h1>Logger</h1>
+          <button id="clear-logs-btn" type="button">Clear</button>
+        </div>
+        <div id="logs" class="logs"></div>
+      </section>
+    </div>
+
+    <script src="panel.js"></script>
+  </body>
+</html>

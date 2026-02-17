@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "MikuYTBypass",
   "description": "A lightweight extension to bypass YouTube's ad system using the declarativeNetRequest API.",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "permissions": [
     "declarativeNetRequest"
   ],
@@ -32,6 +32,10 @@
       "run_at": "document_start"
     }
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "devtools_page": "devtools/devtools.html",
   "web_accessible_resources": [
     {
       "resources": [

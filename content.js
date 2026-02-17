@@ -55,6 +55,45 @@
   const STATUS_TOAST_ID = "miku-ytbypass-status-toast";
   const STATUS_STYLE_ID = "miku-ytbypass-status-style";
   let statusHideTimerId = null;
+  let skipClickCount = 0;
+  let adSessionCount = 0;
+  let isAdActive = false;
+  const logThrottleMap = new Map();
+
+  function sendDevtoolsMessage(type, payload) {
+    try {
+      chrome.runtime.sendMessage({ type, payload });
+    } catch {
+      // Ignore message transport failures.
+    }
+  }
+
+  function pushDevLog(level, message, data, key, throttleMs) {
+    if (key) {
+      const now = Date.now();
+      const previous = logThrottleMap.get(key) || 0;
+      if (now - previous < throttleMs) {
+        return;
+      }
+      logThrottleMap.set(key, now);
+    }
+
+    sendDevtoolsMessage("devlog", {
+      level,
+      message,
+      data: data || {},
+      timestamp: Date.now()
+    });
+  }
+
+  function updateDevStatus(patch) {
+    sendDevtoolsMessage("devstatus", {
+      route: location.pathname + location.search,
+      extensionActive: true,
+      ...patch,
+      timestamp: Date.now()
+    });
+  }
 
   function injectPageScript() {
     if (document.getElementById("miku-ytbypass-inject")) {
@@ -258,9 +297,25 @@
       }
     }
 
+    let clicked = 0;
     for (const candidate of candidates) {
       fireClick(candidate);
+      clicked += 1;
     }
+
+    if (clicked > 0) {
+      skipClickCount += clicked;
+      updateDevStatus({ skipClicks: skipClickCount });
+      pushDevLog(
+        "info",
+        "Skip button click fired",
+        { clicked, totalSkipClicks: skipClickCount },
+        "skip-click",
+        700
+      );
+    }
+
+    return clicked;
   }
 
   function normalizeText(value) {
@@ -334,10 +389,12 @@
 
     document.documentElement.style.removeProperty("overflow");
     document.body?.style?.removeProperty("overflow");
+    pushDevLog("warn", "Anti-adblock popup dismissed", {}, "anti-popup-dismissed", 4000);
   }
-
   function dismissEngagementPanelAds() {
     const panels = document.querySelectorAll("ytd-engagement-panel-section-list-renderer[target-id='engagement-panel-ads']");
+    let handledPanels = 0;
+
     for (const panel of panels) {
       if (!(panel instanceof HTMLElement)) {
         continue;
@@ -345,9 +402,10 @@
 
       panel.setAttribute("visibility", "ENGAGEMENT_PANEL_VISIBILITY_HIDDEN");
       panel.style.display = "none";
+      handledPanels += 1;
 
       const closeBtn = panel.querySelector(
-        "button[aria-label*='Đóng'], button[aria-label*='đóng'], button[aria-label*='Close'], button[aria-label*='close']"
+        "button[aria-label*='Dong'], button[aria-label*='Close'], button[aria-label*='close']"
       );
       if (closeBtn instanceof HTMLElement) {
         fireClick(closeBtn);
@@ -355,7 +413,7 @@
     }
 
     const adPanelToggles = document.querySelectorAll(
-      "toggle-button-view-model button, [aria-label*='Được tài trợ'], [aria-label*='duoc tai tro']"
+      "toggle-button-view-model button, [aria-label*='duoc tai tro'], [aria-label*='sponsored']"
     );
     for (const toggle of adPanelToggles) {
       if (toggle instanceof HTMLElement) {
@@ -365,8 +423,11 @@
         }
       }
     }
-  }
 
+    if (handledPanels > 0) {
+      pushDevLog("info", "Engagement ad panel hidden", { handledPanels }, "engagement-ad-panel", 2500);
+    }
+  }
   function handleVideoAd() {
     if (location.pathname !== "/watch") {
       return;
@@ -381,6 +442,13 @@
     }
 
     if (isAdShowing) {
+      if (!isAdActive) {
+        isAdActive = true;
+        adSessionCount += 1;
+        updateDevStatus({ adState: "in_ad", adSessions: adSessionCount });
+        pushDevLog("warn", "Ad detected", { adSessions: adSessionCount }, "ad-start", 300);
+      }
+
       if (savedMuted === null) {
         savedMuted = video.muted;
       }
@@ -399,6 +467,12 @@
 
       clickSkipButtons();
       return;
+    }
+
+    if (isAdActive) {
+      isAdActive = false;
+      updateDevStatus({ adState: "idle", adSessions: adSessionCount });
+      pushDevLog("info", "Ad ended", { adSessions: adSessionCount }, "ad-end", 300);
     }
 
     if (savedMuted !== null) {
@@ -457,6 +531,13 @@
       return;
     }
     currentPath = nextPath;
+    updateDevStatus({
+      route: currentPath,
+      adState: isAdActive ? "in_ad" : "idle",
+      adSessions: adSessionCount,
+      skipClicks: skipClickCount
+    });
+    pushDevLog("info", "Route changed", { route: currentPath }, "route-change", 250);
     resetFastLoop();
     runLight();
     runFast();
@@ -467,6 +548,14 @@
 
   window.setInterval(runLight, 1200);
   window.setInterval(onRouteMaybeChanged, 1000);
+
+  updateDevStatus({
+    route: currentPath,
+    adState: "idle",
+    adSessions: adSessionCount,
+    skipClicks: skipClickCount
+  });
+  pushDevLog("info", "Content script initialized", { route: currentPath }, "init", 0);
 
   resetFastLoop();
   runLight();

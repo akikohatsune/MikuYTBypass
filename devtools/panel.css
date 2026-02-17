@@ -1,0 +1,152 @@
+:root {
+  color-scheme: dark;
+  --bg: #111319;
+  --card: #1b1f2b;
+  --line: #30364a;
+  --text: #e8edff;
+  --muted: #9ba6c7;
+  --ok: #38d996;
+  --btn: #2c3550;
+  --btn-hover: #394669;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 12px/1.45 "Segoe UI", Tahoma, sans-serif;
+}
+
+.root {
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.card {
+  background: linear-gradient(180deg, #1d2230, #191e29);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.card-head h1 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #5b6274;
+}
+
+.dot.connected {
+  background: var(--ok);
+  box-shadow: 0 0 0 4px rgba(56, 217, 150, 0.15);
+}
+
+.status-grid {
+  padding: 8px 10px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 0;
+}
+
+.row span {
+  color: var(--muted);
+}
+
+code {
+  background: rgba(10, 12, 18, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 2px 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+button {
+  border: 1px solid #465173;
+  border-radius: 6px;
+  background: var(--btn);
+  color: var(--text);
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--btn-hover);
+}
+
+.logs {
+  max-height: 330px;
+  overflow: auto;
+  padding: 6px 10px 10px;
+}
+
+.log-item {
+  border-left: 2px solid #5c6687;
+  padding: 6px 8px;
+  margin: 6px 0;
+  background: rgba(9, 11, 18, 0.45);
+  border-radius: 6px;
+}
+
+.log-item.warn {
+  border-left-color: #ffb43f;
+}
+
+.log-item.error {
+  border-left-color: #ff5f7a;
+}
+
+.log-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.log-msg {
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.log-data {
+  margin-top: 4px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 11px;
+  color: #c9d8ff;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.empty {
+  padding: 10px 0;
+  color: var(--muted);
+}
