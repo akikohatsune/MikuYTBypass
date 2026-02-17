@@ -9,7 +9,7 @@
     }
   })();
 
-  const AD_KEYS = [
+  const AD_KEYS = new Set([
     "adPlacements",
     "adSlots",
     "adBreakHeartbeatParams",
@@ -17,7 +17,12 @@
     "auxiliaryUi",
     "ad3Module",
     "adSafetyReason"
-  ];
+  ]);
+
+  const PLAYER_API_PATH = "/youtubei/v1/player";
+  const INITIAL_SWEEP_COUNT = 6;
+  const INITIAL_SWEEP_INTERVAL_MS = 1000;
+  const NAV_SWEEP_DELAY_MS = 150;
 
   function stripAdKeys(target) {
     if (!target || typeof target !== "object") {
@@ -39,10 +44,9 @@
     stripAdKeys(payload.playerResponse);
 
     if (payload.playerResponse && typeof payload.playerResponse === "object") {
-      const pr = payload.playerResponse;
-      stripAdKeys(pr.playerConfig);
-      stripAdKeys(pr.playabilityStatus);
-      stripAdKeys(pr.streamingData);
+      stripAdKeys(payload.playerResponse.playerConfig);
+      stripAdKeys(payload.playerResponse.playabilityStatus);
+      stripAdKeys(payload.playerResponse.streamingData);
     }
 
     return payload;
@@ -52,9 +56,13 @@
     if (typeof maybeJson !== "string") {
       return maybeJson;
     }
-    if (!maybeJson.includes("adPlacements") && !maybeJson.includes("playerAds") && !maybeJson.includes("adSlots")) {
+
+    const hasAdHints =
+      maybeJson.includes("adPlacements") || maybeJson.includes("playerAds") || maybeJson.includes("adSlots");
+    if (!hasAdHints) {
       return maybeJson;
     }
+
     try {
       const parsed = JSON.parse(maybeJson);
       sanitizePlayerPayload(parsed);
@@ -62,6 +70,30 @@
     } catch {
       return maybeJson;
     }
+  }
+
+  function isPlayerApiRequest(requestInfo) {
+    const requestUrl = typeof requestInfo === "string" ? requestInfo : requestInfo?.url || "";
+    return requestUrl.includes(PLAYER_API_PATH);
+  }
+
+  async function buildSanitizedResponse(response) {
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("json")) {
+      return response;
+    }
+
+    const cloned = response.clone();
+    const payload = await cloned.json();
+    sanitizePlayerPayload(payload);
+
+    const headers = new Headers(response.headers);
+    headers.delete("content-length");
+    return new Response(JSON.stringify(payload), {
+      status: response.status,
+      statusText: response.statusText,
+      headers
+    });
   }
 
   function patchFetch() {
@@ -72,31 +104,12 @@
 
     window.fetch = async function patchedFetch(...args) {
       const response = await nativeFetch.apply(this, args);
+      if (!isPlayerApiRequest(args[0])) {
+        return response;
+      }
 
       try {
-        const requestUrl = typeof args[0] === "string" ? args[0] : args[0]?.url || "";
-        const isPlayerApi = requestUrl.includes("/youtubei/v1/player");
-
-        if (!isPlayerApi) {
-          return response;
-        }
-
-        const contentType = response.headers.get("content-type") || "";
-        if (!contentType.includes("json")) {
-          return response;
-        }
-
-        const cloned = response.clone();
-        const payload = await cloned.json();
-        sanitizePlayerPayload(payload);
-
-        const headers = new Headers(response.headers);
-        headers.delete("content-length");
-        return new Response(JSON.stringify(payload), {
-          status: response.status,
-          statusText: response.statusText,
-          headers
-        });
+        return await buildSanitizedResponse(response);
       } catch {
         return response;
       }
@@ -118,13 +131,12 @@
         }
       });
     } catch {
-      // Ignore if YouTube already locked property definition.
+      // Ignore if YouTube locked this property.
     }
   }
 
   function patchYtPlayerConfig() {
-    const ytplayer = window.ytplayer;
-    const args = ytplayer?.config?.args;
+    const args = window.ytplayer?.config?.args;
     if (!args || typeof args !== "object") {
       return;
     }
@@ -141,14 +153,15 @@
       sanitizePlayerPayload(window.ytInitialData?.playerResponse);
       patchYtPlayerConfig();
     } catch {
-      // Best-effort sweep.
+      // Best effort only.
     }
   }
 
   function exposeVersionCommand() {
     const fullVersion = `MikuYTBypass v${EXT_VERSION}`;
-    console.log(`Made by akikohatsune`);
-    console.log(`git: github.com/akikohatsune/MikuYTBypass`);
+
+    console.log("Made by akikohatsune");
+    console.log("git: github.com/akikohatsune/MikuYTBypass");
 
     try {
       Object.defineProperty(window, "ver", {
@@ -158,7 +171,7 @@
           return fullVersion;
         },
         set() {
-          // Ignore writes to keep command stable.
+          // Keep command stable.
         }
       });
     } catch {
@@ -166,16 +179,23 @@
     }
   }
 
-  exposeVersionCommand();
-  patchFetch();
-  patchInitialPlayerResponse();
-  sweepWindowDataOnce();
+  function scheduleSweeps() {
+    for (let i = 1; i <= INITIAL_SWEEP_COUNT; i += 1) {
+      setTimeout(sweepWindowDataOnce, i * INITIAL_SWEEP_INTERVAL_MS);
+    }
 
-  for (let i = 1; i <= 6; i += 1) {
-    setTimeout(sweepWindowDataOnce, i * 1000);
+    document.addEventListener("yt-navigate-finish", () => {
+      setTimeout(sweepWindowDataOnce, NAV_SWEEP_DELAY_MS);
+    });
   }
 
-  document.addEventListener("yt-navigate-finish", () => {
-    setTimeout(sweepWindowDataOnce, 150);
-  });
+  function init() {
+    exposeVersionCommand();
+    patchFetch();
+    patchInitialPlayerResponse();
+    sweepWindowDataOnce();
+    scheduleSweeps();
+  }
+
+  init();
 })();

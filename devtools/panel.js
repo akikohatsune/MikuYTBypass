@@ -1,138 +1,161 @@
 "use strict";
 
-const params = new URLSearchParams(window.location.search);
-const tabId = Number(params.get("tabId"));
+const tabId = Number(new URLSearchParams(window.location.search).get("tabId"));
 
-const routeEl = document.getElementById("status-route");
-const adStateEl = document.getElementById("status-ad-state");
-const adSessionsEl = document.getElementById("status-ad-sessions");
-const skipClicksEl = document.getElementById("status-skip-clicks");
-const updatedEl = document.getElementById("status-updated");
-const logsEl = document.getElementById("logs");
-const clearBtn = document.getElementById("clear-logs-btn");
-const connDot = document.getElementById("conn-dot");
+const elements = {
+  route: document.getElementById("status-route"),
+  adState: document.getElementById("status-ad-state"),
+  adSessions: document.getElementById("status-ad-sessions"),
+  skipClicks: document.getElementById("status-skip-clicks"),
+  updated: document.getElementById("status-updated"),
+  logs: document.getElementById("logs"),
+  clearButton: document.getElementById("clear-logs-btn"),
+  connectionDot: document.getElementById("conn-dot")
+};
+
+const MESSAGE_TYPE = {
+  state: "state",
+  status: "status",
+  log: "log",
+  logsCleared: "logs-cleared",
+  init: "init",
+  clearLogs: "clear-logs"
+};
 
 let port = null;
 
-function formatTime(value) {
-  if (!Number.isFinite(value)) {
+function formatTime(timestamp) {
+  if (!Number.isFinite(timestamp)) {
     return "-";
   }
-  return new Date(value).toLocaleTimeString();
+  return new Date(timestamp).toLocaleTimeString();
+}
+
+function setConnected(isConnected) {
+  elements.connectionDot.classList.toggle("connected", isConnected);
 }
 
 function renderStatus(status) {
-  const safe = status && typeof status === "object" ? status : {};
-  routeEl.textContent = safe.route || "-";
-  adStateEl.textContent = safe.adState || "idle";
-  adSessionsEl.textContent = String(safe.adSessions || 0);
-  skipClicksEl.textContent = String(safe.skipClicks || 0);
-  updatedEl.textContent = formatTime(safe.timestamp);
+  const safeStatus = status && typeof status === "object" ? status : {};
+  elements.route.textContent = safeStatus.route || "-";
+  elements.adState.textContent = safeStatus.adState || "idle";
+  elements.adSessions.textContent = String(safeStatus.adSessions || 0);
+  elements.skipClicks.textContent = String(safeStatus.skipClicks || 0);
+  elements.updated.textContent = formatTime(safeStatus.timestamp);
 }
 
 function createLogNode(log) {
+  const safeLog = log && typeof log === "object" ? log : {};
   const item = document.createElement("div");
-  item.className = `log-item ${log.level || "info"}`;
+  item.className = `log-item ${safeLog.level || "info"}`;
 
   const head = document.createElement("div");
   head.className = "log-head";
-  const level = document.createElement("span");
-  level.textContent = (log.level || "info").toUpperCase();
-  const ts = document.createElement("span");
-  ts.textContent = formatTime(log.timestamp);
-  head.appendChild(level);
-  head.appendChild(ts);
 
-  const msg = document.createElement("div");
-  msg.className = "log-msg";
-  msg.textContent = log.message || "event";
+  const level = document.createElement("span");
+  level.textContent = String(safeLog.level || "info").toUpperCase();
+
+  const timestamp = document.createElement("span");
+  timestamp.textContent = formatTime(safeLog.timestamp);
+
+  head.appendChild(level);
+  head.appendChild(timestamp);
+
+  const message = document.createElement("div");
+  message.className = "log-msg";
+  message.textContent = safeLog.message || "event";
 
   const data = document.createElement("div");
   data.className = "log-data";
-  data.textContent = JSON.stringify(log.data || {}, null, 2);
+  data.textContent = JSON.stringify(safeLog.data || {}, null, 2);
 
   item.appendChild(head);
-  item.appendChild(msg);
+  item.appendChild(message);
   item.appendChild(data);
   return item;
 }
 
+function renderEmptyLogs() {
+  elements.logs.innerHTML = "";
+  const empty = document.createElement("div");
+  empty.className = "empty";
+  empty.textContent = "No logs yet.";
+  elements.logs.appendChild(empty);
+}
+
 function renderLogs(logs) {
-  logsEl.innerHTML = "";
   if (!Array.isArray(logs) || logs.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "empty";
-    empty.textContent = "No logs yet.";
-    logsEl.appendChild(empty);
+    renderEmptyLogs();
     return;
   }
 
+  elements.logs.innerHTML = "";
   const fragment = document.createDocumentFragment();
   for (const log of logs) {
     fragment.appendChild(createLogNode(log));
   }
-  logsEl.appendChild(fragment);
+  elements.logs.appendChild(fragment);
 }
 
 function prependLog(log) {
-  const empty = logsEl.querySelector(".empty");
+  const empty = elements.logs.querySelector(".empty");
   if (empty) {
     empty.remove();
   }
-  logsEl.prepend(createLogNode(log));
+  elements.logs.prepend(createLogNode(log));
 }
 
-function setConnected(connected) {
-  connDot.classList.toggle("connected", connected);
+function handlePortMessage(message) {
+  if (!message || typeof message !== "object") {
+    return;
+  }
+
+  switch (message.type) {
+    case MESSAGE_TYPE.state:
+      renderStatus(message.state?.status);
+      renderLogs(message.state?.logs || []);
+      return;
+    case MESSAGE_TYPE.status:
+      renderStatus(message.status);
+      return;
+    case MESSAGE_TYPE.log:
+      prependLog(message.log);
+      return;
+    case MESSAGE_TYPE.logsCleared:
+      renderEmptyLogs();
+      return;
+    default:
+      return;
+  }
 }
 
-function connect() {
+function connectDevtoolsPort() {
   if (!Number.isInteger(tabId) || tabId < 0) {
-    renderLogs([]);
+    renderEmptyLogs();
     return;
   }
 
   port = chrome.runtime.connect({ name: "miku-devtools" });
-
-  port.onMessage.addListener((message) => {
-    if (!message || typeof message !== "object") {
-      return;
-    }
-
-    if (message.type === "state") {
-      renderStatus(message.state?.status);
-      renderLogs(message.state?.logs || []);
-      return;
-    }
-
-    if (message.type === "status") {
-      renderStatus(message.status);
-      return;
-    }
-
-    if (message.type === "log") {
-      prependLog(message.log);
-      return;
-    }
-
-    if (message.type === "logs-cleared") {
-      renderLogs([]);
-    }
-  });
-
+  port.onMessage.addListener(handlePortMessage);
   port.onDisconnect.addListener(() => {
     setConnected(false);
+    port = null;
   });
 
   setConnected(true);
-  port.postMessage({ type: "init", tabId });
+  port.postMessage({ type: MESSAGE_TYPE.init, tabId });
 }
 
-clearBtn.addEventListener("click", () => {
+function clearLogs() {
   if (!port) {
     return;
   }
-  port.postMessage({ type: "clear-logs" });
-});
+  port.postMessage({ type: MESSAGE_TYPE.clearLogs });
+}
 
-connect();
+function init() {
+  elements.clearButton.addEventListener("click", clearLogs);
+  connectDevtoolsPort();
+}
+
+init();

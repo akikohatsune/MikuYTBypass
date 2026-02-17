@@ -1,39 +1,95 @@
-# MikuYTBypass
+<p align="center">
+  <img src="miku.jpg" alt="img" width="360">
+</p>
+<p align="center"><span style="color:#8a8f98;">"Miku mode: ON, YouTube ads mode: OFF."</span></p>
 
-Extension MV3 (Chrome/Edge) để giảm quảng cáo YouTube bằng 3 cách:
+<h1 align="center">MikuYTBypass</h1>
 
-- Chặn một số domain/endpoint quảng cáo bằng `declarativeNetRequest`
-- Ẩn các khối quảng cáo trên giao diện YouTube
-- Tự bấm `Skip` và tua nhanh khi phát pre-roll/mid-roll ads
+`MikuYTBypass` is a personal Chrome/Edge Manifest V3 extension that tries to reduce YouTube ads with a multi-layer approach:
 
-Bản hiện tại đã nâng lên mức bypass mạnh hơn:
+- Network blocking (DNR rules)
+- Player data sanitizing
+- Auto skip and ad UI cleanup
+- DevTools panel for live status + logs
 
-- Tiêm script vào page context để lọc `adPlacements`, `playerAds`, `adSlots` từ response/player data
-- Hook `fetch` theo endpoint player để sanitize JSON liên quan đến player
-- Loại bỏ popup cảnh báo anti-adblock phổ biến của YouTube
+## Why This Exists
 
-Đã tối ưu hiệu năng:
+Because waiting for ads is not aura farming.
 
-- Bỏ hook `JSON.parse` toàn cục (nguyên nhân gây chậm trang)
-- Bỏ quét sâu lặp vô hạn, chỉ sweep ngắn lúc vào trang và khi YouTube điều hướng
-- Giảm tần suất vòng lặp UI, chỉ giữ vòng nhanh khi ở trang `/watch`
+This project is built for local/personal use and experimentation with MV3 extension techniques.
 
-## Cài đặt (Load unpacked)
+## Features
 
-1. Mở `chrome://extensions` (hoặc `edge://extensions`)
-2. Bật `Developer mode`
-3. Chọn `Load unpacked`
-4. Trỏ tới thư mục dự án này (`MikuYTBypass`)
-5. Sau mỗi lần chỉnh code: bấm `Reload` extension ở trang extensions
+### Core ad bypass
 
-## File chính
+- Blocks common ad-related requests with `declarativeNetRequest`
+- Removes ad keys from player payload (`adPlacements`, `playerAds`, `adSlots`, etc.)
+- Tries to auto-click skip buttons with robust selectors
+- Handles several YouTube ad panel variants
 
-- `manifest.json`: khai báo extension + quyền + ruleset
-- `rules.json`: danh sách luật chặn request quảng cáo
-- `content.js`: logic ẩn/skip/tua quảng cáo trong player + xử lý popup
-- `inject.js`: patch trực tiếp trong page context
+### UX touches
 
-## Lưu ý
+- Toast status popup in YouTube page (auto hides)
+- `ver` command in page console
+  - Type `ver` in YouTube DevTools Console
+  - Output example: `MikuYTBypass v0.3.0`
 
-- YouTube thay đổi liên tục, nên selector hoặc endpoint có thể cần cập nhật.
-- Dùng cho mục đích cá nhân/local.
+### DevTools integration
+
+- Custom panel: `MikuYTBypass`
+- Real-time status:
+  - Route
+  - Ad state
+  - Ad sessions
+  - Skip clicks
+  - Last update time
+- Logger with clear button
+
+## Install (Load Unpacked)
+
+1. Open `chrome://extensions` or `edge://extensions`
+2. Enable `Developer mode`
+3. Click `Load unpacked`
+4. Select this project folder
+
+After code changes:
+
+1. Click `Reload` on extension card
+2. Hard refresh YouTube tab (`Ctrl+Shift+R`)
+3. Reopen DevTools if panel changes are not reflected
+
+## Dev: Generate Icon Sizes
+
+Run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/generate-icons.ps1
+```
+
+Output files:
+
+- `icons/icon-16.png`
+- `icons/icon-32.png`
+- `icons/icon-48.png`
+- `icons/icon-128.png`
+
+## Dev: Open Custom Panel
+
+1. Open a YouTube page
+2. Press `F12`
+3. Open tab `MikuYTBypass`
+
+## Notes
+
+- YouTube changes frequently. Selectors/endpoints may need updates.
+- This project is best-effort by design, not a guaranteed permanent bypass.
+- Keep it for personal/local usage.
+- Only tested on Chromium browsers, may not work on other platforms.
+
+## License
+This project is licensed under the MIT License. Please comply with the MIT License terms when using it.
+
+---
+
+If you are reading this:  
+Thank you for supporting the digital idol anti-ad mission.

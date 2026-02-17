@@ -1,42 +1,76 @@
 (() => {
   "use strict";
 
-  const HIDE_SELECTORS = [
-    "ytd-display-ad-renderer",
-    "ytd-video-masthead-ad-advertiser-info-renderer",
-    "ytd-ad-slot-renderer",
-    "ytd-in-feed-ad-layout-renderer",
-    "ytd-banner-promo-renderer-background",
-    "ytd-promoted-sparkles-web-renderer",
-    "ytd-search-pyv-renderer",
-    ".ytp-ad-overlay-container",
-    ".ytp-ad-text-overlay",
-    ".ytp-ad-image-overlay",
-    ".ytp-ad-message-container",
-    ".ytp-ad-player-overlay",
-    ".video-ads",
-    ".ytp-ad-module",
-    "#player-ads",
-    "ytd-enforcement-message-view-model",
-    "ytd-engagement-panel-section-list-renderer[target-id='engagement-panel-ads']",
-    "ytd-ads-engagement-panel-content-renderer",
-    "panel-ad-header-image-lockup-view-model",
-    "panel-text-icon-text-grid-cards-sub-layout-content-view-model",
-    "ad-avatar-lockup-view-model",
-    "ad-button-view-model",
-    "ad-grid-card-collection-view-model",
-    "ad-grid-card-text-view-model"
-  ];
+  const EXT_VERSION = (() => {
+    try {
+      return chrome.runtime.getManifest()?.version || "unknown";
+    } catch {
+      return "unknown";
+    }
+  })();
 
-  const SKIP_BUTTON_SELECTORS = [
-    "button.ytp-ad-skip-button",
-    "button.ytp-ad-skip-button-modern",
-    ".ytp-skip-ad-button",
-    "button.ytp-ad-overlay-close-button",
-    ".ytp-ad-skip-button-slot button",
-    ".ytp-skip-ad-button__text",
-    ".ytp-skip-ad-button__icon"
-  ];
+  const IDS = {
+    injectScript: "miku-ytbypass-inject",
+    hideStyle: "miku-ytbypass-style",
+    statusStyle: "miku-ytbypass-status-style",
+    statusToast: "miku-ytbypass-status-toast"
+  };
+
+  const INTERVALS = {
+    lightLoopMs: 1200,
+    routeCheckMs: 1000,
+    fastWatchLoopMs: 300,
+    toastVisibleMs: 2000
+  };
+
+  const SELECTORS = {
+    hide: [
+      "ytd-display-ad-renderer",
+      "ytd-video-masthead-ad-advertiser-info-renderer",
+      "ytd-ad-slot-renderer",
+      "ytd-in-feed-ad-layout-renderer",
+      "ytd-banner-promo-renderer-background",
+      "ytd-promoted-sparkles-web-renderer",
+      "ytd-search-pyv-renderer",
+      ".ytp-ad-overlay-container",
+      ".ytp-ad-text-overlay",
+      ".ytp-ad-image-overlay",
+      ".ytp-ad-message-container",
+      ".ytp-ad-player-overlay",
+      ".video-ads",
+      ".ytp-ad-module",
+      "#player-ads",
+      "ytd-enforcement-message-view-model",
+      "ytd-engagement-panel-section-list-renderer[target-id='engagement-panel-ads']",
+      "ytd-ads-engagement-panel-content-renderer",
+      "panel-ad-header-image-lockup-view-model",
+      "panel-text-icon-text-grid-cards-sub-layout-content-view-model",
+      "ad-avatar-lockup-view-model",
+      "ad-button-view-model",
+      "ad-grid-card-collection-view-model",
+      "ad-grid-card-text-view-model"
+    ],
+    skipButtons: [
+      "button.ytp-ad-skip-button",
+      "button.ytp-ad-skip-button-modern",
+      ".ytp-skip-ad-button",
+      "button.ytp-ad-overlay-close-button",
+      ".ytp-ad-skip-button-slot button",
+      ".ytp-skip-ad-button__text",
+      ".ytp-skip-ad-button__icon"
+    ],
+    playerButtons: "button, [role='button']",
+    playerRoot: ".html5-video-player",
+    watchVideo: "video",
+    antiAdblockOverlay: "ytd-enforcement-message-view-model",
+    antiAdblockDialog: "tp-yt-paper-dialog",
+    antiAdblockBackdrop: "tp-yt-iron-overlay-backdrop",
+    engagementAdPanel: "ytd-engagement-panel-section-list-renderer[target-id='engagement-panel-ads']",
+    adPanelToggleCandidates: "toggle-button-view-model button, [aria-label*='duoc tai tro'], [aria-label*='sponsored']",
+    skipUiSignals: ".ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button",
+    adSignalElements:
+      ".ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .ytp-ad-preview-container, .ytp-ad-duration-remaining"
+  };
 
   const SKIP_TEXT_HINTS = [
     "skip",
@@ -47,94 +81,103 @@
     "bo qua quang cao",
     "bo qua quang cao nay"
   ];
-  const EXT_VERSION = (() => {
-    try {
-      return chrome.runtime.getManifest()?.version || "unknown";
-    } catch {
-      return "unknown";
-    }
-  })();
 
-  let savedMuted = null;
-  let savedPlaybackRate = null;
-  let currentPath = location.pathname + location.search;
-  let fastLoopId = null;
-  const STATUS_TOAST_ID = "miku-ytbypass-status-toast";
-  const STATUS_STYLE_ID = "miku-ytbypass-status-style";
-  let statusHideTimerId = null;
-  let skipClickCount = 0;
-  let adSessionCount = 0;
-  let isAdActive = false;
-  const logThrottleMap = new Map();
+  const CLOSE_TEXT_HINTS = ["dong", "close"];
 
-  function sendDevtoolsMessage(type, payload) {
+  const state = {
+    savedMuted: null,
+    savedPlaybackRate: null,
+    currentRoute: getRouteKey(),
+    fastLoopId: null,
+    statusHideTimerId: null,
+    hasShownToastOnce: false,
+    skipClickCount: 0,
+    adSessionCount: 0,
+    isAdActive: false,
+    logThrottleMap: new Map()
+  };
+
+  function getRouteKey() {
+    return `${location.pathname}${location.search}`;
+  }
+
+  function sendRuntimeMessage(type, payload) {
     try {
       chrome.runtime.sendMessage({ type, payload });
     } catch {
-      // Ignore message transport failures.
+      // Ignore runtime messaging failures.
     }
   }
 
-  function pushDevLog(level, message, data, key, throttleMs) {
-    if (key) {
-      const now = Date.now();
-      const previous = logThrottleMap.get(key) || 0;
-      if (now - previous < throttleMs) {
-        return;
-      }
-      logThrottleMap.set(key, now);
+  function shouldThrottle(key, throttleMs) {
+    if (!key) {
+      return false;
+    }
+    const now = Date.now();
+    const previous = state.logThrottleMap.get(key) || 0;
+    if (now - previous < throttleMs) {
+      return true;
+    }
+    state.logThrottleMap.set(key, now);
+    return false;
+  }
+
+  function pushDevLog(level, message, data = {}, throttleKey = null, throttleMs = 0) {
+    if (shouldThrottle(throttleKey, throttleMs)) {
+      return;
     }
 
-    sendDevtoolsMessage("devlog", {
+    sendRuntimeMessage("devlog", {
       level,
       message,
-      data: data || {},
+      data,
       timestamp: Date.now()
     });
   }
 
-  function updateDevStatus(patch) {
-    sendDevtoolsMessage("devstatus", {
+  function updateDevStatus(patch = {}) {
+    sendRuntimeMessage("devstatus", {
       version: EXT_VERSION,
-      route: location.pathname + location.search,
+      route: getRouteKey(),
       extensionActive: true,
       ...patch,
       timestamp: Date.now()
     });
   }
 
-  function injectPageScript() {
-    if (document.getElementById("miku-ytbypass-inject")) {
+  function ensureInjectedPageScript() {
+    if (document.getElementById(IDS.injectScript)) {
       return;
     }
 
     const script = document.createElement("script");
-    script.id = "miku-ytbypass-inject";
+    script.id = IDS.injectScript;
     script.src = chrome.runtime.getURL("inject.js");
     script.dataset.extVersion = EXT_VERSION;
     script.async = false;
+
     (document.head || document.documentElement).appendChild(script);
     script.remove();
   }
 
-  function injectHideStyle() {
-    if (document.getElementById("miku-ytbypass-style")) {
+  function ensureHideStyle() {
+    if (document.getElementById(IDS.hideStyle)) {
       return;
     }
 
     const style = document.createElement("style");
-    style.id = "miku-ytbypass-style";
-    style.textContent = `${HIDE_SELECTORS.join(",")} { display: none !important; }`;
+    style.id = IDS.hideStyle;
+    style.textContent = `${SELECTORS.hide.join(",")} { display: none !important; }`;
     document.documentElement.appendChild(style);
   }
 
   function ensureStatusStyle() {
-    if (document.getElementById(STATUS_STYLE_ID)) {
+    if (document.getElementById(IDS.statusStyle)) {
       return;
     }
 
     const style = document.createElement("style");
-    style.id = STATUS_STYLE_ID;
+    style.id = IDS.statusStyle;
     style.textContent = `
       @keyframes mikuToastIn {
         from { opacity: 0; transform: translateY(12px) scale(0.96); }
@@ -144,7 +187,7 @@
         from { opacity: 1; transform: translateY(0) scale(1); }
         to { opacity: 0; transform: translateY(10px) scale(0.98); }
       }
-      #${STATUS_TOAST_ID} {
+      #${IDS.statusToast} {
         position: fixed;
         left: 16px;
         bottom: 16px;
@@ -167,15 +210,15 @@
         visibility: hidden;
         transform: translateY(10px) scale(0.98);
       }
-      #${STATUS_TOAST_ID}.is-visible {
+      #${IDS.statusToast}.is-visible {
         visibility: visible;
         animation: mikuToastIn 180ms ease-out forwards;
       }
-      #${STATUS_TOAST_ID}.is-hiding {
+      #${IDS.statusToast}.is-hiding {
         visibility: visible;
         animation: mikuToastOut 180ms ease-in forwards;
       }
-      #${STATUS_TOAST_ID} img {
+      #${IDS.statusToast} img {
         width: 36px;
         height: 36px;
         border-radius: 10px;
@@ -183,25 +226,25 @@
         border: 1px solid rgba(255, 255, 255, 0.45);
         flex: 0 0 auto;
       }
-      #${STATUS_TOAST_ID} .miku-status-text {
+      #${IDS.statusToast} .miku-status-text {
         display: flex;
         flex-direction: column;
         gap: 2px;
         min-width: 0;
       }
-      #${STATUS_TOAST_ID} .miku-status-title {
+      #${IDS.statusToast} .miku-status-title {
         font: 700 13px/1.1 "Segoe UI", Tahoma, sans-serif;
         letter-spacing: 0.2px;
         white-space: nowrap;
       }
-      #${STATUS_TOAST_ID} .miku-status-sub {
+      #${IDS.statusToast} .miku-status-sub {
         font: 500 11px/1.2 "Segoe UI", Tahoma, sans-serif;
         color: #d2e9ff;
         opacity: 0.9;
         white-space: nowrap;
       }
       @media (max-width: 600px) {
-        #${STATUS_TOAST_ID} {
+        #${IDS.statusToast} {
           left: 10px;
           right: 10px;
           bottom: 10px;
@@ -209,20 +252,19 @@
         }
       }
     `;
-
     document.documentElement.appendChild(style);
   }
 
   function ensureStatusToast() {
     ensureStatusStyle();
 
-    const existing = document.getElementById(STATUS_TOAST_ID);
+    const existing = document.getElementById(IDS.statusToast);
     if (existing instanceof HTMLElement) {
       return existing;
     }
 
     const toast = document.createElement("div");
-    toast.id = STATUS_TOAST_ID;
+    toast.id = IDS.statusToast;
     toast.setAttribute("role", "status");
     toast.setAttribute("aria-live", "polite");
     toast.setAttribute("aria-label", "MikuYTBypass status");
@@ -238,12 +280,12 @@
     title.className = "miku-status-title";
     title.textContent = "Adblock Working!";
 
-    const sub = document.createElement("div");
-    sub.className = "miku-status-sub";
-    sub.textContent = "MikuYTBypass Notify!";
+    const subtitle = document.createElement("div");
+    subtitle.className = "miku-status-sub";
+    subtitle.textContent = "MikuYTBypass Notify!";
 
     textWrap.appendChild(title);
-    textWrap.appendChild(sub);
+    textWrap.appendChild(subtitle);
     toast.appendChild(avatar);
     toast.appendChild(textWrap);
 
@@ -252,88 +294,62 @@
   }
 
   function showStatusToast() {
-    const toast = ensureStatusToast();
-    const routeKey = location.pathname + location.search;
-    if (toast.dataset.routeKey === routeKey) {
+    if (state.hasShownToastOnce) {
       return;
     }
 
-    toast.dataset.routeKey = routeKey;
+    const toast = ensureStatusToast();
+    state.hasShownToastOnce = true;
     toast.classList.remove("is-hiding");
     toast.classList.add("is-visible");
 
-    if (statusHideTimerId !== null) {
-      clearTimeout(statusHideTimerId);
-      statusHideTimerId = null;
+    if (state.statusHideTimerId !== null) {
+      clearTimeout(state.statusHideTimerId);
+      state.statusHideTimerId = null;
     }
 
-    statusHideTimerId = window.setTimeout(() => {
+    state.statusHideTimerId = window.setTimeout(() => {
       toast.classList.remove("is-visible");
       toast.classList.add("is-hiding");
-      statusHideTimerId = null;
-    }, 2000);
-  }
-
-  function clickSkipButtons() {
-    const candidates = new Set();
-
-    for (const selector of SKIP_BUTTON_SELECTORS) {
-      const matches = document.querySelectorAll(selector);
-      for (const node of matches) {
-        if (node instanceof HTMLElement) {
-          candidates.add(node);
-        }
-      }
-    }
-
-    const player = document.querySelector(".html5-video-player");
-    if (player) {
-      const maybeButtons = player.querySelectorAll("button, [role='button']");
-      for (const node of maybeButtons) {
-        if (!(node instanceof HTMLElement)) {
-          continue;
-        }
-
-        const label = normalizeText([
-          node.getAttribute("aria-label") || "",
-          node.getAttribute("title") || "",
-          node.textContent || ""
-        ].join(" "));
-
-        if (SKIP_TEXT_HINTS.some((hint) => label.includes(hint))) {
-          candidates.add(node);
-        }
-      }
-    }
-
-    let clicked = 0;
-    for (const candidate of candidates) {
-      fireClick(candidate);
-      clicked += 1;
-    }
-
-    if (clicked > 0) {
-      skipClickCount += clicked;
-      updateDevStatus({ skipClicks: skipClickCount });
-      pushDevLog(
-        "info",
-        "Skip button click fired",
-        { clicked, totalSkipClicks: skipClickCount },
-        "skip-click",
-        700
-      );
-    }
-
-    return clicked;
+      state.statusHideTimerId = null;
+    }, INTERVALS.toastVisibleMs);
   }
 
   function normalizeText(value) {
-    return value
+    return String(value || "")
       .toLowerCase()
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .replace(/\s+/g, " ")
       .trim();
+  }
+
+  function getClickableTarget(element) {
+    const direct = element.closest("button, [role='button'], .ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern");
+    if (direct instanceof HTMLElement) {
+      return direct;
+    }
+
+    let node = element;
+    for (let i = 0; i < 6 && node; i += 1) {
+      if (!(node instanceof HTMLElement)) {
+        break;
+      }
+
+      const className = node.className || "";
+      const looksClickable =
+        node.tabIndex >= 0 ||
+        typeof node.onclick === "function" ||
+        node.getAttribute("role") === "button" ||
+        /ytp-(?:skip|ad).*button/.test(className);
+
+      if (looksClickable) {
+        return node;
+      }
+      node = node.parentElement;
+    }
+
+    return element;
   }
 
   function fireClick(element) {
@@ -353,41 +369,72 @@
     target.click();
   }
 
-  function getClickableTarget(element) {
-    const direct = element.closest("button, [role='button'], .ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern");
-    if (direct instanceof HTMLElement) {
-      return direct;
+  function collectSkipCandidates(player) {
+    const candidates = new Set();
+
+    for (const selector of SELECTORS.skipButtons) {
+      const matches = document.querySelectorAll(selector);
+      for (const match of matches) {
+        if (match instanceof HTMLElement) {
+          candidates.add(match);
+        }
+      }
     }
 
-    let node = element;
-    for (let i = 0; i < 6 && node; i += 1) {
-      if (!(node instanceof HTMLElement)) {
-        break;
-      }
-      const cls = node.className || "";
-      const looksClickable =
-        node.tabIndex >= 0 ||
-        typeof node.onclick === "function" ||
-        node.getAttribute("role") === "button" ||
-        /ytp-(?:skip|ad).*button/.test(cls);
-
-      if (looksClickable) {
-        return node;
-      }
-      node = node.parentElement;
+    if (!(player instanceof HTMLElement)) {
+      return candidates;
     }
 
-    return element;
+    const buttonCandidates = player.querySelectorAll(SELECTORS.playerButtons);
+    for (const candidate of buttonCandidates) {
+      if (!(candidate instanceof HTMLElement)) {
+        continue;
+      }
+
+      const label = normalizeText(
+        [candidate.getAttribute("aria-label"), candidate.getAttribute("title"), candidate.textContent].join(" ")
+      );
+      if (SKIP_TEXT_HINTS.some((hint) => label.includes(hint))) {
+        candidates.add(candidate);
+      }
+    }
+
+    return candidates;
+  }
+
+  function clickSkipButtons() {
+    const player = document.querySelector(SELECTORS.playerRoot);
+    const candidates = collectSkipCandidates(player);
+
+    let clicked = 0;
+    for (const candidate of candidates) {
+      fireClick(candidate);
+      clicked += 1;
+    }
+
+    if (clicked > 0) {
+      state.skipClickCount += clicked;
+      updateDevStatus({ skipClicks: state.skipClickCount });
+      pushDevLog(
+        "info",
+        "Skip button click fired",
+        { clicked, totalSkipClicks: state.skipClickCount },
+        "skip-click",
+        700
+      );
+    }
+
+    return clicked;
   }
 
   function dismissAntiAdblockPopup() {
-    const overlay = document.querySelector("ytd-enforcement-message-view-model");
+    const overlay = document.querySelector(SELECTORS.antiAdblockOverlay);
     if (!overlay) {
       return;
     }
 
-    const dialog = overlay.closest("tp-yt-paper-dialog");
-    const backdrop = document.querySelector("tp-yt-iron-overlay-backdrop");
+    const dialog = overlay.closest(SELECTORS.antiAdblockDialog);
+    const backdrop = document.querySelector(SELECTORS.antiAdblockBackdrop);
 
     if (dialog) {
       dialog.remove();
@@ -400,8 +447,19 @@
     document.body?.style?.removeProperty("overflow");
     pushDevLog("warn", "Anti-adblock popup dismissed", {}, "anti-popup-dismissed", 4000);
   }
+
+  function isCloseButton(button) {
+    if (!(button instanceof HTMLElement)) {
+      return false;
+    }
+    const label = normalizeText(
+      [button.getAttribute("aria-label"), button.getAttribute("title"), button.textContent].join(" ")
+    );
+    return CLOSE_TEXT_HINTS.some((hint) => label.includes(hint));
+  }
+
   function dismissEngagementPanelAds() {
-    const panels = document.querySelectorAll("ytd-engagement-panel-section-list-renderer[target-id='engagement-panel-ads']");
+    const panels = document.querySelectorAll(SELECTORS.engagementAdPanel);
     let handledPanels = 0;
 
     for (const panel of panels) {
@@ -413,84 +471,28 @@
       panel.style.display = "none";
       handledPanels += 1;
 
-      const closeBtn = panel.querySelector(
-        "button[aria-label*='Dong'], button[aria-label*='Close'], button[aria-label*='close']"
-      );
-      if (closeBtn instanceof HTMLElement) {
-        fireClick(closeBtn);
+      const closeButtons = panel.querySelectorAll(SELECTORS.playerButtons);
+      for (const closeButton of closeButtons) {
+        if (isCloseButton(closeButton)) {
+          fireClick(closeButton);
+          break;
+        }
       }
     }
 
-    const adPanelToggles = document.querySelectorAll(
-      "toggle-button-view-model button, [aria-label*='duoc tai tro'], [aria-label*='sponsored']"
-    );
-    for (const toggle of adPanelToggles) {
-      if (toggle instanceof HTMLElement) {
-        const adPanel = toggle.closest("ytd-engagement-panel-section-list-renderer[target-id='engagement-panel-ads']");
-        if (adPanel instanceof HTMLElement) {
-          adPanel.style.display = "none";
-        }
+    const toggles = document.querySelectorAll(SELECTORS.adPanelToggleCandidates);
+    for (const toggle of toggles) {
+      if (!(toggle instanceof HTMLElement)) {
+        continue;
+      }
+      const adPanel = toggle.closest(SELECTORS.engagementAdPanel);
+      if (adPanel instanceof HTMLElement) {
+        adPanel.style.display = "none";
       }
     }
 
     if (handledPanels > 0) {
       pushDevLog("info", "Engagement ad panel hidden", { handledPanels }, "engagement-ad-panel", 2500);
-    }
-  }
-  function handleVideoAd() {
-    if (location.pathname !== "/watch") {
-      return;
-    }
-
-    const player = document.querySelector(".html5-video-player");
-    const video = document.querySelector("video");
-    const isAdShowing = hasStrongAdSignal(player);
-
-    if (!(video instanceof HTMLVideoElement)) {
-      return;
-    }
-
-    if (isAdShowing) {
-      if (!isAdActive) {
-        isAdActive = true;
-        adSessionCount += 1;
-        updateDevStatus({ adState: "in_ad", adSessions: adSessionCount });
-        pushDevLog("warn", "Ad detected", { adSessions: adSessionCount }, "ad-start", 300);
-      }
-
-      if (savedMuted === null) {
-        savedMuted = video.muted;
-      }
-      if (savedPlaybackRate === null) {
-        savedPlaybackRate = video.playbackRate;
-      }
-
-      video.muted = true;
-      video.playbackRate = 16;
-
-      const looksLikeAdLength = Number.isFinite(video.duration) && video.duration > 0 && video.duration <= 120;
-      const hasSkipUi = Boolean(player?.querySelector(".ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button"));
-      if (looksLikeAdLength && hasSkipUi && video.currentTime < video.duration - 0.2) {
-        video.currentTime = Math.max(0, video.duration - 0.1);
-      }
-
-      clickSkipButtons();
-      return;
-    }
-
-    if (isAdActive) {
-      isAdActive = false;
-      updateDevStatus({ adState: "idle", adSessions: adSessionCount });
-      pushDevLog("info", "Ad ended", { adSessions: adSessionCount }, "ad-end", 300);
-    }
-
-    if (savedMuted !== null) {
-      video.muted = savedMuted;
-      savedMuted = null;
-    }
-    if (savedPlaybackRate !== null) {
-      video.playbackRate = savedPlaybackRate;
-      savedPlaybackRate = null;
     }
   }
 
@@ -503,16 +505,70 @@
       return true;
     }
 
-    return Boolean(
-      player.querySelector(
-        ".ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .ytp-ad-preview-container, .ytp-ad-duration-remaining"
-      )
-    );
+    return Boolean(player.querySelector(SELECTORS.adSignalElements));
+  }
+
+  function handleVideoAd() {
+    if (location.pathname !== "/watch") {
+      return;
+    }
+
+    const player = document.querySelector(SELECTORS.playerRoot);
+    const video = document.querySelector(SELECTORS.watchVideo);
+    const isAdShowing = hasStrongAdSignal(player);
+
+    if (!(video instanceof HTMLVideoElement)) {
+      return;
+    }
+
+    if (isAdShowing) {
+      if (!state.isAdActive) {
+        state.isAdActive = true;
+        state.adSessionCount += 1;
+        updateDevStatus({ adState: "in_ad", adSessions: state.adSessionCount });
+        pushDevLog("warn", "Ad detected", { adSessions: state.adSessionCount }, "ad-start", 300);
+      }
+
+      if (state.savedMuted === null) {
+        state.savedMuted = video.muted;
+      }
+      if (state.savedPlaybackRate === null) {
+        state.savedPlaybackRate = video.playbackRate;
+      }
+
+      video.muted = true;
+      video.playbackRate = 16;
+
+      const hasFiniteDuration = Number.isFinite(video.duration) && video.duration > 0;
+      const looksLikeAdLength = hasFiniteDuration && video.duration <= 120;
+      const hasSkipUi = Boolean(player?.querySelector(SELECTORS.skipUiSignals));
+      if (looksLikeAdLength && hasSkipUi && video.currentTime < video.duration - 0.2) {
+        video.currentTime = Math.max(0, video.duration - 0.1);
+      }
+
+      clickSkipButtons();
+      return;
+    }
+
+    if (state.isAdActive) {
+      state.isAdActive = false;
+      updateDevStatus({ adState: "idle", adSessions: state.adSessionCount });
+      pushDevLog("info", "Ad ended", { adSessions: state.adSessionCount }, "ad-end", 300);
+    }
+
+    if (state.savedMuted !== null) {
+      video.muted = state.savedMuted;
+      state.savedMuted = null;
+    }
+    if (state.savedPlaybackRate !== null) {
+      video.playbackRate = state.savedPlaybackRate;
+      state.savedPlaybackRate = null;
+    }
   }
 
   function runLight() {
-    injectPageScript();
-    injectHideStyle();
+    ensureInjectedPageScript();
+    ensureHideStyle();
     showStatusToast();
     dismissAntiAdblockPopup();
     dismissEngagementPanelAds();
@@ -525,49 +581,56 @@
   }
 
   function resetFastLoop() {
-    if (fastLoopId !== null) {
-      clearInterval(fastLoopId);
-      fastLoopId = null;
+    if (state.fastLoopId !== null) {
+      clearInterval(state.fastLoopId);
+      state.fastLoopId = null;
     }
+
     if (location.pathname === "/watch") {
-      fastLoopId = window.setInterval(runFast, 300);
+      state.fastLoopId = window.setInterval(runFast, INTERVALS.fastWatchLoopMs);
     }
   }
 
   function onRouteMaybeChanged() {
-    const nextPath = location.pathname + location.search;
-    if (nextPath === currentPath) {
+    const nextRoute = getRouteKey();
+    if (nextRoute === state.currentRoute) {
       return;
     }
-    currentPath = nextPath;
+
+    state.currentRoute = nextRoute;
     updateDevStatus({
-      route: currentPath,
-      adState: isAdActive ? "in_ad" : "idle",
-      adSessions: adSessionCount,
-      skipClicks: skipClickCount
+      route: state.currentRoute,
+      adState: state.isAdActive ? "in_ad" : "idle",
+      adSessions: state.adSessionCount,
+      skipClicks: state.skipClickCount
     });
-    pushDevLog("info", "Route changed", { route: currentPath }, "route-change", 250);
+    pushDevLog("info", "Route changed", { route: state.currentRoute }, "route-change", 250);
+
     resetFastLoop();
     runLight();
     runFast();
   }
 
-  document.addEventListener("yt-navigate-finish", onRouteMaybeChanged);
-  window.addEventListener("popstate", onRouteMaybeChanged);
+  function init() {
+    document.addEventListener("yt-navigate-finish", onRouteMaybeChanged);
+    window.addEventListener("popstate", onRouteMaybeChanged);
 
-  window.setInterval(runLight, 1200);
-  window.setInterval(onRouteMaybeChanged, 1000);
+    window.setInterval(runLight, INTERVALS.lightLoopMs);
+    window.setInterval(onRouteMaybeChanged, INTERVALS.routeCheckMs);
 
-  updateDevStatus({
-    route: currentPath,
-    adState: "idle",
-    adSessions: adSessionCount,
-    skipClicks: skipClickCount
-  });
-  pushDevLog("info", "Content script initialized", { route: currentPath, version: EXT_VERSION }, "init", 0);
-  console.info(`[MikuYTBypass v${EXT_VERSION}] Content script initialized`, { route: currentPath });
+    updateDevStatus({
+      route: state.currentRoute,
+      adState: "idle",
+      adSessions: state.adSessionCount,
+      skipClicks: state.skipClickCount
+    });
+    pushDevLog("info", "Content script initialized", { route: state.currentRoute, version: EXT_VERSION }, "init", 0);
+    console.info(`[MikuYTBypass v${EXT_VERSION}] Content script initialized`, { route: state.currentRoute });
 
-  resetFastLoop();
-  runLight();
-  runFast();
+    resetFastLoop();
+    runLight();
+    runFast();
+  }
+
+  init();
 })();
