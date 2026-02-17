@@ -47,6 +47,13 @@
     "bo qua quang cao",
     "bo qua quang cao nay"
   ];
+  const EXT_VERSION = (() => {
+    try {
+      return chrome.runtime.getManifest()?.version || "unknown";
+    } catch {
+      return "unknown";
+    }
+  })();
 
   let savedMuted = null;
   let savedPlaybackRate = null;
@@ -88,6 +95,7 @@
 
   function updateDevStatus(patch) {
     sendDevtoolsMessage("devstatus", {
+      version: EXT_VERSION,
       route: location.pathname + location.search,
       extensionActive: true,
       ...patch,
@@ -103,6 +111,7 @@
     const script = document.createElement("script");
     script.id = "miku-ytbypass-inject";
     script.src = chrome.runtime.getURL("inject.js");
+    script.dataset.extVersion = EXT_VERSION;
     script.async = false;
     (document.head || document.documentElement).appendChild(script);
     script.remove();
@@ -555,7 +564,8 @@
     adSessions: adSessionCount,
     skipClicks: skipClickCount
   });
-  pushDevLog("info", "Content script initialized", { route: currentPath }, "init", 0);
+  pushDevLog("info", "Content script initialized", { route: currentPath, version: EXT_VERSION }, "init", 0);
+  console.info(`[MikuYTBypass v${EXT_VERSION}] Content script initialized`, { route: currentPath });
 
   resetFastLoop();
   runLight();

@@ -1,6 +1,14 @@
 (() => {
   "use strict";
 
+  const EXT_VERSION = (() => {
+    try {
+      return document.currentScript?.dataset?.extVersion || "unknown";
+    } catch {
+      return "unknown";
+    }
+  })();
+
   const AD_KEYS = [
     "adPlacements",
     "adSlots",
@@ -137,6 +145,26 @@
     }
   }
 
+  function exposeVersionCommand() {
+    const fullVersion = `MikuYTBypass v${EXT_VERSION}`;
+
+    try {
+      Object.defineProperty(window, "ver", {
+        configurable: true,
+        enumerable: false,
+        get() {
+          return fullVersion;
+        },
+        set() {
+          // Ignore writes to keep command stable.
+        }
+      });
+    } catch {
+      // Ignore if property cannot be redefined.
+    }
+  }
+
+  exposeVersionCommand();
   patchFetch();
   patchInitialPlayerResponse();
   sweepWindowDataOnce();
