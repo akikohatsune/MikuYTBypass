@@ -1,13 +1,11 @@
 :root {
   color-scheme: dark;
-  --bg: #111319;
-  --card: #1b1f2b;
-  --line: #30364a;
+  --bg: #0f1219;
+  --line: #2a3144;
   --text: #e8edff;
   --muted: #9ba6c7;
   --ok: #38d996;
-  --btn: #2c3550;
-  --btn-hover: #394669;
+  --btn: #7fa7ff;
 }
 
 * {
@@ -24,54 +22,92 @@ body {
 }
 
 .root {
-  padding: 10px;
+  padding: 10px 12px 14px;
   display: grid;
   gap: 10px;
 }
 
+.hero {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.hero-text {
+  text-align: left;
+}
+
+.hero-text h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+.hero-text p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.hero-image {
+  width: 50px;
+  height: 50px;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
 .card {
-  background: linear-gradient(180deg, #1d2230, #191e29);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  overflow: hidden;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
 }
 
 .card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px;
+  padding: 4px 0 6px;
   border-bottom: 1px solid var(--line);
 }
 
 .card-head h1 {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
 }
 
 .dot {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   background: #5b6274;
 }
 
 .dot.connected {
   background: var(--ok);
-  box-shadow: 0 0 0 4px rgba(56, 217, 150, 0.15);
 }
 
 .status-grid {
-  padding: 8px 10px;
+  padding-top: 4px;
 }
 
 .row {
   display: grid;
-  grid-template-columns: 90px 1fr;
-  gap: 8px;
+  grid-template-columns: 95px 1fr;
+  gap: 10px;
   align-items: center;
-  padding: 5px 0;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.row:last-child {
+  border-bottom: none;
 }
 
 .row span {
@@ -79,49 +115,47 @@ body {
 }
 
 code {
-  background: rgba(10, 12, 18, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  padding: 2px 6px;
+  background: transparent;
+  border: none;
+  padding: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: #dce8ff;
+  font-family: Consolas, "Courier New", monospace;
 }
 
 button {
-  border: 1px solid #465173;
-  border-radius: 6px;
-  background: var(--btn);
-  color: var(--text);
-  padding: 4px 8px;
-  font-size: 11px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--btn);
+  padding: 0;
+  font-size: 12px;
   cursor: pointer;
 }
 
 button:hover {
-  background: var(--btn-hover);
+  text-decoration: underline;
 }
 
 .logs {
-  max-height: 330px;
+  max-height: 360px;
   overflow: auto;
-  padding: 6px 10px 10px;
+  padding-top: 6px;
 }
 
 .log-item {
-  border-left: 2px solid #5c6687;
-  padding: 6px 8px;
-  margin: 6px 0;
-  background: rgba(9, 11, 18, 0.45);
-  border-radius: 6px;
+  border-left: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 8px 0;
+  margin: 0;
+  background: transparent;
+  border-radius: 0;
 }
 
-.log-item.warn {
-  border-left-color: #ffb43f;
-}
-
-.log-item.error {
-  border-left-color: #ff5f7a;
+.log-item:last-child {
+  border-bottom: none;
 }
 
 .log-head {
@@ -149,4 +183,15 @@ button:hover {
 .empty {
   padding: 10px 0;
   color: var(--muted);
+}
+
+@media (max-width: 560px) {
+  .hero {
+    grid-template-columns: auto 1fr;
+  }
+
+  .hero-image {
+    width: 46px;
+    height: 46px;
+  }
 }

@@ -147,6 +147,8 @@
 
   function exposeVersionCommand() {
     const fullVersion = `MikuYTBypass v${EXT_VERSION}`;
+    console.log(`Made by akikohatsune`);
+    console.log(`git: github.com/akikohatsune/MikuYTBypass`);
 
     try {
       Object.defineProperty(window, "ver", {
