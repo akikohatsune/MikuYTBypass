@@ -45,7 +45,7 @@ This project is built for local/personal use and experimentation with MV3 extens
   - Last update time
 - Logger with clear button
 
-## Install (Load Unpacked)
+## Install (Load Unpacked) - I don't have 5$:(
 
 1. Open `chrome://extensions` or `edge://extensions`
 2. Enable `Developer mode`
