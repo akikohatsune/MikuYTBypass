@@ -1,3 +1,14 @@
+# [ARCHIVED] **MikuYTBypass**
+Status: End of Life (EOL)
+
+This project was a 5-day intensive sprint to bypass YouTube's latest ad-detection algorithms.
+
+- The Result: 120 hours of ad-free streaming achieved.
+- The Verdict: The cat-and-mouse game with YT's server-side updates is a full-time job. I’ve decided to archive this repository to focus on other adventures.
+
+Rest in peace, little script. You served us well for 5 glorious days.
+
+
 <p align="center">
   <img src="miku.png" alt="img" width="360">
 </p>
