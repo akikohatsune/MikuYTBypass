@@ -1,172 +1,247 @@
-"use strict";
+// 1. Define injection function
+function multiTechBypass() {
+    // JSON Interception
+    const originalJSONParse = JSON.parse;
+    JSON.parse = function(text) {
+        let data = originalJSONParse(text);
+        try {
+            if (data?.adPlacements) delete data.adPlacements;
+            if (data?.playerAds) delete data.playerAds;
+            if (data?.adSlots) data.adSlots = [];
+        } catch (e) {}
+        return data;
+    };
 
+    // XHR Hooking
+    const orgOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function(method, url) {
+        if (typeof url === 'string' && (url.includes('ads') || url.includes('log_event'))) {
+            return; 
+        }
+        return orgOpen.apply(this, arguments);
+    };
+
+    // Player Config Hijack
+    Object.defineProperty(window, 'ytplayer', {
+        set: function(val) {
+            if (val?.config) {
+                val.config.ads_flags = {};
+                val.config.encoded_ad_tag_url = "";
+            }
+            this._ytplayer = val;
+        },
+        get: function() { return this._ytplayer; },
+        configurable: true
+    });
+}
+
+// 2. Tab update listener
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    // Run at page load start (loading) to intercept early scripts
+    if (changeInfo.status === 'loading' && tab.url?.includes('youtube.com')) {
+        chrome.scripting.executeScript({
+            target: { tabId: tabId },
+            func: multiTechBypass,
+            world: 'MAIN' // REQUIRED: execute in page context
+        }).catch(err => console.error("Injection failed:", err));
+    }
+});
+
+// 3. Set network-level rules
+chrome.runtime.onInstalled.addListener(() => {
+    chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: [1, 2],
+        addRules: [
+            {
+                "id": 1,
+                "priority": 1,
+                "action": { "type": "block" },
+                "condition": {
+                    "urlFilter": "||googleads.g.doubleclick.net^",
+                    "resourceTypes": ["script", "xmlhttprequest", "sub_frame"]
+                }
+            },
+            {
+                "id": 2,
+                "priority": 1,
+                "action": { "type": "block" },
+                "condition": {
+                    "urlFilter": "||youtube.com/api/stats/ads*",
+                    "resourceTypes": ["xmlhttprequest"]
+                }
+            }
+        ]
+    });
+});
+
+// 4. DevTools state management
 const MAX_LOGS = 400;
 const tabStateMap = new Map();
 const tabPortsMap = new Map();
 
 function normalizeTabId(value) {
-  const num = Number(value);
-  if (!Number.isInteger(num) || num < 0) {
-    return null;
-  }
-  return num;
+    const num = Number(value);
+    if (!Number.isInteger(num) || num < 0) {
+        return null;
+    }
+    return num;
 }
 
 function ensureTabState(tabId) {
-  let state = tabStateMap.get(tabId);
-  if (!state) {
-    state = {
-      status: {
-        extensionActive: true,
-        route: "",
-        adState: "idle",
-        adSessions: 0,
-        skipClicks: 0,
-        timestamp: Date.now()
-      },
-      logs: []
-    };
-    tabStateMap.set(tabId, state);
-  }
-  return state;
+    let state = tabStateMap.get(tabId);
+    if (!state) {
+        state = {
+            status: {
+                extensionActive: true,
+                route: "",
+                adState: "idle",
+                adSessions: 0,
+                skipClicks: 0,
+                timestamp: Date.now()
+            },
+            logs: []
+        };
+        tabStateMap.set(tabId, state);
+    }
+    return state;
 }
 
 function getSerializableState(tabId) {
-  const state = ensureTabState(tabId);
-  return {
-    status: { ...state.status },
-    logs: state.logs.slice()
-  };
+    const state = ensureTabState(tabId);
+    return {
+        status: { ...state.status },
+        logs: state.logs.slice()
+    };
 }
 
 function postToTabPorts(tabId, payload) {
-  const ports = tabPortsMap.get(tabId);
-  if (!ports || ports.size === 0) {
-    return;
-  }
-
-  for (const port of ports) {
-    try {
-      port.postMessage(payload);
-    } catch {
-      // Ignore stale ports.
+    const ports = tabPortsMap.get(tabId);
+    if (!ports || ports.size === 0) {
+        return;
     }
-  }
+
+    for (const port of ports) {
+        try {
+            port.postMessage(payload);
+        } catch {
+            // Ignore stale ports
+        }
+    }
 }
 
 function addLog(tabId, payload) {
-  const state = ensureTabState(tabId);
-  const log = {
-    level: typeof payload?.level === "string" ? payload.level : "info",
-    message: typeof payload?.message === "string" ? payload.message : "event",
-    data: payload?.data && typeof payload.data === "object" ? payload.data : {},
-    timestamp: Number.isFinite(payload?.timestamp) ? payload.timestamp : Date.now()
-  };
+    const state = ensureTabState(tabId);
+    const log = {
+        level: typeof payload?.level === "string" ? payload.level : "info",
+        message: typeof payload?.message === "string" ? payload.message : "event",
+        data: payload?.data && typeof payload.data === "object" ? payload.data : {},
+        timestamp: Number.isFinite(payload?.timestamp) ? payload.timestamp : Date.now()
+    };
 
-  state.logs.unshift(log);
-  if (state.logs.length > MAX_LOGS) {
-    state.logs.length = MAX_LOGS;
-  }
+    state.logs.unshift(log);
+    if (state.logs.length > MAX_LOGS) {
+        state.logs.length = MAX_LOGS;
+    }
 
-  postToTabPorts(tabId, { type: "log", log });
+    postToTabPorts(tabId, { type: "log", log });
 }
 
 function updateStatus(tabId, payload) {
-  const state = ensureTabState(tabId);
-  const safePatch = payload && typeof payload === "object" ? payload : {};
-  state.status = {
-    ...state.status,
-    ...safePatch,
-    timestamp: Number.isFinite(safePatch.timestamp) ? safePatch.timestamp : Date.now()
-  };
+    const state = ensureTabState(tabId);
+    const safePatch = payload && typeof payload === "object" ? payload : {};
+    state.status = {
+        ...state.status,
+        ...safePatch,
+        timestamp: Number.isFinite(safePatch.timestamp) ? safePatch.timestamp : Date.now()
+    };
 
-  postToTabPorts(tabId, { type: "status", status: state.status });
+    postToTabPorts(tabId, { type: "status", status: state.status });
 }
 
 function bindPortToTab(tabId, port) {
-  let ports = tabPortsMap.get(tabId);
-  if (!ports) {
-    ports = new Set();
-    tabPortsMap.set(tabId, ports);
-  }
-  ports.add(port);
+    let ports = tabPortsMap.get(tabId);
+    if (!ports) {
+        ports = new Set();
+        tabPortsMap.set(tabId, ports);
+    }
+    ports.add(port);
 }
 
 function unbindPortFromAllTabs(port) {
-  for (const [tabId, ports] of tabPortsMap.entries()) {
-    if (ports.delete(port) && ports.size === 0) {
-      tabPortsMap.delete(tabId);
+    for (const [tabId, ports] of tabPortsMap.entries()) {
+        if (ports.delete(port) && ports.size === 0) {
+            tabPortsMap.delete(tabId);
+        }
     }
-  }
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!message || typeof message !== "object") {
-    return;
-  }
+    if (!message || typeof message !== "object") {
+        return;
+    }
 
-  if (message.type === "devtools:get-state") {
-    const tabId = normalizeTabId(message.tabId);
-    sendResponse({
-      ok: tabId !== null,
-      state: tabId === null ? null : getSerializableState(tabId)
-    });
-    return;
-  }
+    if (message.type === "devtools:get-state") {
+        const tabId = normalizeTabId(message.tabId);
+        sendResponse({
+            ok: tabId !== null,
+            state: tabId === null ? null : getSerializableState(tabId)
+        });
+        return;
+    }
 
-  const senderTabId = normalizeTabId(sender?.tab?.id);
-  const explicitTabId = normalizeTabId(message.tabId);
-  const tabId = explicitTabId ?? senderTabId;
-  if (tabId === null) {
-    return;
-  }
+    const senderTabId = normalizeTabId(sender?.tab?.id);
+    const explicitTabId = normalizeTabId(message.tabId);
+    const tabId = explicitTabId ?? senderTabId;
+    if (tabId === null) {
+        return;
+    }
 
-  if (message.type === "devlog") {
-    addLog(tabId, message.payload);
-    return;
-  }
+    if (message.type === "devlog") {
+        addLog(tabId, message.payload);
+        return;
+    }
 
-  if (message.type === "devstatus") {
-    updateStatus(tabId, message.payload);
-  }
+    if (message.type === "devstatus") {
+        updateStatus(tabId, message.payload);
+    }
 });
 
 chrome.runtime.onConnect.addListener((port) => {
-  if (port.name !== "miku-devtools") {
-    return;
-  }
-
-  let connectedTabId = null;
-
-  port.onMessage.addListener((message) => {
-    if (!message || typeof message !== "object") {
-      return;
-    }
-
-    if (message.type === "init") {
-      const tabId = normalizeTabId(message.tabId);
-      if (tabId === null) {
+    if (port.name !== "miku-devtools") {
         return;
-      }
-
-      connectedTabId = tabId;
-      bindPortToTab(tabId, port);
-      port.postMessage({ type: "state", state: getSerializableState(tabId) });
-      return;
     }
 
-    if (connectedTabId === null) {
-      return;
-    }
+    let connectedTabId = null;
 
-    if (message.type === "clear-logs") {
-      const state = ensureTabState(connectedTabId);
-      state.logs = [];
-      postToTabPorts(connectedTabId, { type: "logs-cleared" });
-    }
-  });
+    port.onMessage.addListener((message) => {
+        if (!message || typeof message !== "object") {
+            return;
+        }
 
-  port.onDisconnect.addListener(() => {
-    unbindPortFromAllTabs(port);
-  });
+        if (message.type === "init") {
+            const tabId = normalizeTabId(message.tabId);
+            if (tabId === null) {
+                return;
+            }
+
+            connectedTabId = tabId;
+            bindPortToTab(tabId, port);
+            port.postMessage({ type: "state", state: getSerializableState(tabId) });
+            return;
+        }
+
+        if (connectedTabId === null) {
+            return;
+        }
+
+        if (message.type === "clear-logs") {
+            const state = ensureTabState(connectedTabId);
+            state.logs = [];
+            postToTabPorts(connectedTabId, { type: "logs-cleared" });
+        }
+    });
+
+    port.onDisconnect.addListener(() => {
+        unbindPortFromAllTabs(port);
+    });
 });

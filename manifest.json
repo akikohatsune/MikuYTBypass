@@ -1,41 +1,24 @@
 {
   "manifest_version": 3,
   "name": "MikuYTBypass",
+  "version": "0.4.1",
   "description": "A lightweight extension to bypass YouTube's ad system using the declarativeNetRequest API.",
-  "version": "0.3.0",
-  "permissions": [
-    "declarativeNetRequest"
-  ],
-  "host_permissions": [
-    "*://*.youtube.com/*",
-    "*://*.doubleclick.net/*",
-    "*://*.googlesyndication.com/*",
-    "*://*.googleadservices.com/*"
-  ],
-  "declarative_net_request": {
-    "rule_resources": [
-      {
-        "id": "yt_ad_rules",
-        "enabled": true,
-        "path": "rules.json"
-      }
-    ]
-  },
+  "permissions": ["scripting", "declarativeNetRequest", "storage"],
+  "host_permissions": ["*://*.youtube.com/*"],
   "content_scripts": [
     {
-      "matches": [
-        "*://*.youtube.com/*"
-      ],
-      "js": [
-        "content.js"
-      ],
+      "matches": ["*://*.youtube.com/*"],
+      "js": ["content.js"],
       "run_at": "document_start"
     }
   ],
-  "background": {
-    "service_worker": "background.js"
+  "declarative_net_request": {
+    "rule_resources": [{
+      "id": "ruleset_1",
+      "enabled": true,
+      "path": "rules.json"
+    }]
   },
-  "devtools_page": "devtools/devtools.html",
   "web_accessible_resources": [
     {
       "resources": [
@@ -61,3 +44,4 @@
     }
   }
 }
+
